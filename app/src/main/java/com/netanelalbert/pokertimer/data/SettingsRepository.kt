@@ -30,7 +30,7 @@ class SettingsRepository private constructor(private val context: Context) {
         val stored = prefs[KEY_SETTINGS] ?: return@map TimerSettings()
         // A settings blob written by an older/newer build should never be fatal: fall back to
         // defaults rather than crashing on launch.
-        val parsed = runCatching { json.decodeFromString<TimerSettings>(stored) }.getOrNull()
+        val parsed = runCatching { json.decodeFromString(TimerSettings.serializer(), stored) }.getOrNull()
         parsed?.takeIf { it.levels.isNotEmpty() } ?: TimerSettings()
     }
 
@@ -43,13 +43,13 @@ class SettingsRepository private constructor(private val context: Context) {
     suspend fun update(transform: (TimerSettings) -> TimerSettings) {
         context.dataStore.edit { prefs ->
             val current = prefs[KEY_SETTINGS]
-                ?.let { runCatching { json.decodeFromString<TimerSettings>(it) }.getOrNull() }
+                ?.let { runCatching { json.decodeFromString(TimerSettings.serializer(), it) }.getOrNull() }
                 ?: TimerSettings()
             val updated = transform(current).let {
                 // An empty structure would leave the clock with nothing to count.
                 if (it.levels.isEmpty()) it.copy(levels = TimerSettings.DEFAULT_LEVELS) else it
             }
-            prefs[KEY_SETTINGS] = json.encodeToString(updated)
+            prefs[KEY_SETTINGS] = json.encodeToString(TimerSettings.serializer(), updated)
         }
     }
 

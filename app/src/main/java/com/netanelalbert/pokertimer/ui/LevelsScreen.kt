@@ -27,6 +27,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +48,7 @@ import com.netanelalbert.pokertimer.model.TimerSettings
 @Composable
 fun LevelsScreen(viewModel: PokerTimerViewModel, onBack: () -> Unit) {
     val settings by viewModel.settings.collectAsState()
+    val ready by viewModel.ready.collectAsState()
     val levels = settings.levels
 
     Scaffold(
@@ -94,6 +96,7 @@ fun LevelsScreen(viewModel: PokerTimerViewModel, onBack: () -> Unit) {
                 Text(stringResource(R.string.apply_duration_to_all))
             }
 
+            if (!ready) return@Column
             LazyColumn(
                 modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -153,10 +156,25 @@ private fun LevelRow(
     onMoveDown: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    var smallBlindText by remember(index, level) { mutableStateOf(level.smallBlind.toString()) }
-    var bigBlindText by remember(index, level) { mutableStateOf(level.bigBlind.toString()) }
-    var durationText by remember(index, level) {
-        mutableStateOf((level.durationSeconds / 60).toString())
+    // Seeded per row, not re-keyed on `level`: an edit round-trips through DataStore and comes
+    // back as a new level object, and re-keying on it would reset the field under the user's
+    // fingers mid-number. Instead each field syncs down only when the stored value genuinely
+    // diverges from what is typed — an external change such as "reset to defaults".
+    var smallBlindText by remember(index) { mutableStateOf(level.smallBlind.toString()) }
+    var bigBlindText by remember(index) { mutableStateOf(level.bigBlind.toString()) }
+    var durationText by remember(index) { mutableStateOf((level.durationSeconds / 60).toString()) }
+
+    LaunchedEffect(level.smallBlind) {
+        if (smallBlindText.toIntOrNull() != level.smallBlind) {
+            smallBlindText = level.smallBlind.toString()
+        }
+    }
+    LaunchedEffect(level.bigBlind) {
+        if (bigBlindText.toIntOrNull() != level.bigBlind) bigBlindText = level.bigBlind.toString()
+    }
+    LaunchedEffect(level.durationSeconds) {
+        val minutes = level.durationSeconds / 60
+        if (durationText.toIntOrNull() != minutes) durationText = minutes.toString()
     }
 
     Card(modifier = Modifier.fillMaxWidth()) {
