@@ -36,6 +36,7 @@ class TimerEngineTest {
         warningEnabled: Boolean = true,
         warningLeadSeconds: Int = 30,
         chimeEnabled: Boolean = true,
+        snoozeSeconds: Int = 120,
     ) = TimerEngine { clock.now }.apply {
         applySettings(
             TimerSettings(
@@ -43,8 +44,16 @@ class TimerEngineTest {
                 warningEnabled = warningEnabled,
                 warningLeadSeconds = warningLeadSeconds,
                 chimeEnabled = chimeEnabled,
+                snoozeSeconds = snoozeSeconds,
             )
         )
+    }
+
+    /** Runs the first level out so the clock is sitting on a sounding alarm. */
+    private fun engineAtAlarm(): TimerEngine = engine().apply {
+        primaryAction()
+        clock.advance(600_000L)
+        tick()
     }
 
     private val recorded = mutableListOf<TimerEvent>()
@@ -342,6 +351,166 @@ class TimerEngineTest {
             1,
             engine.events().count { it == TimerEvent.LEVEL_STARTED },
         )
+    }
+
+    @Test
+    fun `snooze silences the alarm without advancing anything`() {
+        val engine = engineAtAlarm()
+
+        engine.snooze()
+
+        val state = engine.state.value
+        assertFalse("the alarm must go quiet", state.isAlarming)
+        assertTrue(state.isSnoozed)
+        assertFalse("a snooze is not a start", state.isRunning)
+        // Still parked on the new blinds, showing their untouched duration.
+        assertEquals(1, state.displayLevelIndex)
+        assertEquals(300_000L, state.remainingMs)
+        assertEquals(120_000L, state.snoozeRemainingMs)
+        val phase = state.phase as TimerPhase.LevelEnded
+        assertEquals(0, phase.finishedLevelIndex)
+        assertEquals(1, phase.nextLevelIndex)
+    }
+
+    @Test
+    fun `the service must stay alive through a snooze to bring the alarm back`() {
+        val engine = engineAtAlarm()
+        engine.snooze()
+
+        assertTrue(engine.state.value.needsService)
+    }
+
+    @Test
+    fun `the alarm comes back when the snooze runs out`() {
+        val engine = engineAtAlarm()
+        engine.snooze()
+
+        clock.advance(119_000L)
+        engine.tick()
+        assertFalse("still inside the snooze", engine.state.value.isAlarming)
+        assertEquals(1_000L, engine.state.value.snoozeRemainingMs)
+
+        clock.advance(1_000L)
+        engine.tick()
+
+        val state = engine.state.value
+        assertTrue("the alarm must return", state.isAlarming)
+        assertFalse(state.isSnoozed)
+        assertNull(state.snoozeRemainingMs)
+        // And it comes back to the same place, still not started.
+        assertEquals(TimerPhase.LevelEnded(0, 1), state.phase)
+        assertFalse(state.isRunning)
+    }
+
+    @Test
+    fun `a snooze can be repeated indefinitely`() {
+        val engine = engineAtAlarm()
+
+        repeat(5) {
+            engine.snooze()
+            assertFalse(engine.state.value.isAlarming)
+            clock.advance(120_000L)
+            engine.tick()
+            assertTrue(engine.state.value.isAlarming)
+        }
+        // Five snoozes later the clock has still not moved off the level that ended.
+        assertEquals(TimerPhase.LevelEnded(0, 1), engine.state.value.phase)
+    }
+
+    @Test
+    fun `starting the next level clears a snooze`() {
+        val engine = engineAtAlarm()
+        engine.snooze()
+
+        engine.primaryAction()
+
+        val state = engine.state.value
+        assertEquals(TimerPhase.Running(1, clock.now + 300_000L), state.phase)
+        assertFalse(state.isSnoozed)
+        assertFalse(state.isAlarming)
+    }
+
+    @Test
+    fun `the snooze length comes from settings`() {
+        val engine = engine(snoozeSeconds = 45)
+        engine.primaryAction()
+        clock.advance(600_000L)
+        engine.tick()
+
+        engine.snooze()
+        assertEquals(45_000L, engine.state.value.snoozeRemainingMs)
+
+        clock.advance(45_000L)
+        engine.tick()
+        assertTrue(engine.state.value.isAlarming)
+    }
+
+    @Test
+    fun `snooze does nothing unless the alarm is up`() {
+        val engine = engine()
+        val parked = engine.state.value.phase
+
+        engine.snooze()
+        assertEquals(parked, engine.state.value.phase)
+
+        engine.primaryAction()
+        val running = engine.state.value.phase
+        engine.snooze()
+        assertEquals("a running level cannot be snoozed", running, engine.state.value.phase)
+    }
+
+    @Test
+    fun `the last level can be snoozed too`() {
+        val engine = engine()
+        engine.goToLevel(2)
+        engine.primaryAction()
+        clock.advance(120_000L)
+        engine.tick()
+
+        engine.snooze()
+        assertFalse(engine.state.value.isAlarming)
+
+        clock.advance(120_000L)
+        engine.tick()
+        assertTrue(engine.state.value.isAlarming)
+        assertNull((engine.state.value.phase as TimerPhase.LevelEnded).nextLevelIndex)
+    }
+
+    @Test
+    fun `editing the structure during a snooze does not lose it`() {
+        val engine = engineAtAlarm()
+        engine.snooze()
+
+        engine.setLevels(levels.map { it.copy(smallBlind = it.smallBlind * 2) })
+
+        assertTrue(engine.state.value.isSnoozed)
+        assertFalse(engine.state.value.isAlarming)
+    }
+
+    @Test
+    fun `leaving the alarm clears the snooze countdown with it`() {
+        val engine = engineAtAlarm()
+        engine.snooze()
+        engine.reset()
+        assertNull(engine.state.value.snoozeRemainingMs)
+
+        val second = engineAtAlarm()
+        second.snooze()
+        second.primaryAction()
+        assertNull(second.state.value.snoozeRemainingMs)
+    }
+
+    @Test
+    fun `skipping a level during a snooze starts that level, same as skipping mid-alarm`() {
+        val engine = engineAtAlarm()
+        engine.snooze()
+
+        engine.nextLevel()
+
+        val state = engine.state.value
+        assertTrue("a snoozed alarm is still a live clock", state.isRunning)
+        assertFalse(state.isSnoozed)
+        assertEquals(2, state.displayLevelIndex)
     }
 
     @Test

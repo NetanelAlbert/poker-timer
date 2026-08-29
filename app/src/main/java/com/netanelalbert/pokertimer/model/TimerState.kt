@@ -18,8 +18,15 @@ sealed interface TimerPhase {
     /**
      * A level just ran out. The alarm is looping and the display has already moved on to
      * [nextLevelIndex]'s blinds. [nextLevelIndex] is null when the last level just ended.
+     *
+     * [snoozeUntilMs] is set while the alarm is snoozed: the clock stays exactly here, silently,
+     * until that deadline on the monotonic clock passes and the alarm starts up again.
      */
-    data class LevelEnded(val finishedLevelIndex: Int, val nextLevelIndex: Int?) : TimerPhase
+    data class LevelEnded(
+        val finishedLevelIndex: Int,
+        val nextLevelIndex: Int?,
+        val snoozeUntilMs: Long? = null,
+    ) : TimerPhase
 
     /** The last level ended and was acknowledged. */
     data object Finished : TimerPhase
@@ -30,6 +37,8 @@ data class TimerState(
     val levels: List<BlindLevel>,
     val phase: TimerPhase,
     val remainingMs: Long,
+    /** Time left on a snooze, or null when the alarm is not snoozed. */
+    val snoozeRemainingMs: Long? = null,
 ) {
     /** The level whose blinds the screen should show. */
     val displayLevelIndex: Int
@@ -47,11 +56,17 @@ data class TimerState(
 
     val isRunning: Boolean get() = phase is TimerPhase.Running
 
-    /** True while the blinds-up alarm should be sounding. */
-    val isAlarming: Boolean get() = phase is TimerPhase.LevelEnded
+    /** True while the blinds-up alarm should be sounding. A snooze silences it without moving on. */
+    val isAlarming: Boolean get() = phase is TimerPhase.LevelEnded && phase.snoozeUntilMs == null
 
-    /** The foreground service only needs to exist while the clock is live. */
-    val needsService: Boolean get() = isRunning || isAlarming
+    /** True while the alarm is silenced but still due to come back. */
+    val isSnoozed: Boolean get() = phase is TimerPhase.LevelEnded && phase.snoozeUntilMs != null
+
+    /**
+     * The foreground service has to outlive a snooze as well as the alarm itself: something has to
+     * still be running to bring the alarm back.
+     */
+    val needsService: Boolean get() = isRunning || phase is TimerPhase.LevelEnded
 
     /** Fraction of the current level already played, for the progress ring. */
     val progress: Float

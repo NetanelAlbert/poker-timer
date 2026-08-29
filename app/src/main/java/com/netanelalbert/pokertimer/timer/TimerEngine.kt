@@ -50,6 +50,7 @@ class TimerEngine(private val clock: () -> Long) {
     private var warningEnabled = true
     private var warningLeadMs = 30_000L
     private var chimeEnabled = true
+    private var snoozeMs = 120_000L
 
     /** Guards the pre-end warning so it fires exactly once per level, even across pause/resume. */
     private var warningFired = false
@@ -60,6 +61,7 @@ class TimerEngine(private val clock: () -> Long) {
         warningEnabled = settings.warningEnabled
         warningLeadMs = settings.warningLeadSeconds * 1000L
         chimeEnabled = settings.chimeEnabled
+        snoozeMs = settings.snoozeSeconds * 1000L
         setLevels(settings.levels)
     }
 
@@ -88,7 +90,7 @@ class TimerEngine(private val clock: () -> Long) {
                 TimerPhase.Ready(index, remaining)
             }
             is TimerPhase.Running -> TimerPhase.Running(p.levelIndex.coerceIn(0, lastIndex), p.deadlineMs)
-            is TimerPhase.LevelEnded -> TimerPhase.LevelEnded(
+            is TimerPhase.LevelEnded -> p.copy(
                 finishedLevelIndex = p.finishedLevelIndex.coerceIn(0, lastIndex),
                 nextLevelIndex = p.nextLevelIndex?.takeIf { it <= lastIndex },
             )
@@ -115,6 +117,19 @@ class TimerEngine(private val clock: () -> Long) {
         }
     }
 
+    /**
+     * Silence the blinds-up alarm without moving on. The clock stays exactly where it is — parked
+     * on the new blinds, not started — and the alarm comes back once the snooze runs out.
+     */
+    fun snooze() {
+        val current = _state.value
+        val phase = current.phase as? TimerPhase.LevelEnded ?: return
+        _state.value = current.copy(
+            phase = phase.copy(snoozeUntilMs = clock() + snoozeMs),
+            snoozeRemainingMs = snoozeMs,
+        )
+    }
+
     fun pause() {
         val current = _state.value
         val phase = current.phase as? TimerPhase.Running ?: return
@@ -122,6 +137,7 @@ class TimerEngine(private val clock: () -> Long) {
         _state.value = current.copy(
             phase = TimerPhase.Ready(phase.levelIndex, remaining),
             remainingMs = remaining,
+            snoozeRemainingMs = null,
         )
     }
 
@@ -141,9 +157,10 @@ class TimerEngine(private val clock: () -> Long) {
         // Stepping off either end is a no-op rather than a clamp: silently restarting the level
         // you are already on is not what "next"/"previous" is asking for.
         val target = index.takeIf { it in current.levels.indices } ?: return
-        // A live clock (running, or an alarm waiting to be acknowledged) stays live across a jump;
-        // a parked clock stays parked, so nudging through the structure never starts a level.
-        if (current.isRunning || current.isAlarming) {
+        // A live clock (running, or an alarm waiting to be acknowledged — snoozed or not) stays
+        // live across a jump; a parked clock stays parked, so nudging through the structure never
+        // starts a level.
+        if (current.isRunning || current.phase is TimerPhase.LevelEnded) {
             beginLevel(target)
         } else {
             val duration = current.levels[target].durationMs
@@ -151,6 +168,7 @@ class TimerEngine(private val clock: () -> Long) {
             _state.value = current.copy(
                 phase = TimerPhase.Ready(target, duration),
                 remainingMs = duration,
+                snoozeRemainingMs = null,
             )
         }
     }
@@ -163,6 +181,7 @@ class TimerEngine(private val clock: () -> Long) {
         _state.value = current.copy(
             phase = TimerPhase.Ready(0, duration),
             remainingMs = duration,
+            snoozeRemainingMs = null,
         )
     }
 
@@ -172,7 +191,25 @@ class TimerEngine(private val clock: () -> Long) {
      */
     fun tick() {
         val current = _state.value
-        val phase = current.phase as? TimerPhase.Running ?: return
+        when (val phase = current.phase) {
+            is TimerPhase.Running -> tickRunning(current, phase)
+            is TimerPhase.LevelEnded -> tickSnooze(current, phase)
+            else -> Unit
+        }
+    }
+
+    /** Bring the alarm back when a snooze runs out. */
+    private fun tickSnooze(current: TimerState, phase: TimerPhase.LevelEnded) {
+        val until = phase.snoozeUntilMs ?: return
+        val remaining = until - clock()
+        _state.value = if (remaining <= 0L) {
+            current.copy(phase = phase.copy(snoozeUntilMs = null), snoozeRemainingMs = null)
+        } else {
+            current.copy(snoozeRemainingMs = remaining)
+        }
+    }
+
+    private fun tickRunning(current: TimerState, phase: TimerPhase.Running) {
         val remaining = phase.deadlineMs - clock()
 
         if (remaining <= 0L) {
@@ -209,6 +246,7 @@ class TimerEngine(private val clock: () -> Long) {
         _state.value = current.copy(
             phase = TimerPhase.Running(target, clock() + duration),
             remainingMs = duration,
+            snoozeRemainingMs = null,
         )
         if (chimeEnabled) _events.trySend(TimerEvent.LEVEL_STARTED)
     }
@@ -232,7 +270,11 @@ class TimerEngine(private val clock: () -> Long) {
     }
 
     private fun finish() {
-        _state.value = _state.value.copy(phase = TimerPhase.Finished, remainingMs = 0L)
+        _state.value = _state.value.copy(
+            phase = TimerPhase.Finished,
+            remainingMs = 0L,
+            snoozeRemainingMs = null,
+        )
     }
 
     private fun TimerState.withRecomputedRemaining(): TimerState = when (val p = phase) {

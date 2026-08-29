@@ -71,6 +71,7 @@ class TimerService : Service() {
 
         when (intent?.action) {
             ACTION_PRIMARY -> engine.primaryAction()
+            ACTION_SNOOZE -> engine.snooze()
             ACTION_NEXT -> engine.nextLevel()
             ACTION_RESET -> engine.reset()
         }
@@ -204,6 +205,7 @@ class TimerService : Service() {
 
     companion object {
         const val ACTION_PRIMARY = "com.netanelalbert.pokertimer.PRIMARY"
+        const val ACTION_SNOOZE = "com.netanelalbert.pokertimer.SNOOZE"
         const val ACTION_NEXT = "com.netanelalbert.pokertimer.NEXT"
         const val ACTION_RESET = "com.netanelalbert.pokertimer.RESET"
 

@@ -6,10 +6,13 @@ A tournament blind clock for home poker games, built natively for Android in Kot
 
 The app counts down the duration of each blind level. When the countdown reaches zero, a looping alarm sounds and the display immediately shows the next level's blinds. However, the countdown for the next level does **not** start automatically. The app remains in this alarming state until you tap the primary action (the large button), which silences the alarm and starts the next level's countdown. Nothing advances while nobody is looking.
 
+If the alarm goes off mid-hand, **Snooze** silences it without advancing anything: the clock stays parked on the new blinds and the alarm comes back after the snooze interval. It can be snoozed as many times as you like.
+
 ## Features
 
 - **Editable blind structure**: Add, remove, or reorder levels; apply a single duration to all levels
 - **Three configurable sounds**: Pick from system ringtone picker for blinds-up alarm, pre-end warning (with configurable lead time, default 30 seconds), and level-start chime
+- **Snooze**: Silence a ringing alarm and have it return after a configurable interval (default 2 minutes), without starting the next level; repeatable
 - **Vibration and volume control**: Enable/disable vibration; adjust alarm volume
 - **Screen-on behavior**: Option to keep screen on during the tournament
 - **Persistent timing**: Runs in a foreground service with an ongoing notification carrying pause, next, and reset actions; timing continues with the screen off

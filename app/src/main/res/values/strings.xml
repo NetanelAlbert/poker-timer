@@ -74,4 +74,11 @@
     <string name="reset_to_defaults_confirmation">Reset all settings, including the blind levels, to their defaults?</string>
     <string name="cancel">Cancel</string>
     <string name="pick_sound">Pick</string>
+
+    <!-- Snooze -->
+    <string name="snooze">Snooze</string>
+    <string name="snoozed">Snoozed</string>
+    <string name="snooze_ringing_in">Ringing again in %1$s</string>
+    <string name="snooze_length">Snooze length</string>
+    <string name="notification_snoozed">Snoozed \u2022 blinds are now %1$s</string>
 </resources>

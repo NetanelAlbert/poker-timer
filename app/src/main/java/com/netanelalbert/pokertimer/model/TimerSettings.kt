@@ -16,6 +16,7 @@ data class TimerSettings(
     val warningEnabled: Boolean = true,
     val warningLeadSeconds: Int = 30,
     val chimeEnabled: Boolean = true,
+    val snoozeSeconds: Int = 120,
     val vibrateEnabled: Boolean = true,
     val alarmVolume: Float = 1f,
     val keepScreenOn: Boolean = true,
@@ -23,6 +24,8 @@ data class TimerSettings(
     companion object {
         const val MIN_LEVEL_SECONDS = 5
         const val MAX_LEVEL_SECONDS = 6 * 60 * 60
+        const val MIN_SNOOZE_SECONDS = 30
+        const val MAX_SNOOZE_SECONDS = 600
 
         /** A conventional home-game structure: blinds roughly 1.5x per level, 20 minutes each. */
         val DEFAULT_LEVELS: List<BlindLevel> = listOf(

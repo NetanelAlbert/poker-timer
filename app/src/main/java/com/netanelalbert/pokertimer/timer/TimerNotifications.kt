@@ -74,7 +74,13 @@ object TimerNotifications {
                     context.getString(R.string.tournament_complete)
                 }
                 builder
-                    .setContentTitle(context.getString(R.string.blinds_up))
+                    .setContentTitle(
+                        if (state.isSnoozed) {
+                            context.getString(R.string.notification_snoozed, blinds)
+                        } else {
+                            context.getString(R.string.blinds_up)
+                        }
+                    )
                     .setContentText(
                         if (phase.nextLevelIndex != null) {
                             context.getString(R.string.notification_tap_to_start, blinds, levelNumber)
@@ -83,6 +89,23 @@ object TimerNotifications {
                         }
                     )
                     .addAction(0, action, serviceIntent(context, TimerService.ACTION_PRIMARY, 1))
+
+                if (state.isSnoozed) {
+                    // Count the snooze down in the notification so it is obvious the alarm is
+                    // coming back, and roughly when.
+                    state.snoozeRemainingMs?.let { remaining ->
+                        builder
+                            .setWhen(System.currentTimeMillis() + remaining)
+                            .setUsesChronometer(true)
+                            .setChronometerCountDown(true)
+                    }
+                } else if (phase.nextLevelIndex != null) {
+                    builder.addAction(
+                        0,
+                        context.getString(R.string.snooze),
+                        serviceIntent(context, TimerService.ACTION_SNOOZE, 4),
+                    )
+                }
             }
 
             is TimerPhase.Ready -> {

@@ -29,6 +29,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -108,6 +109,7 @@ fun TimerScreen(
             Controls(
                 state = state,
                 onPrimary = { TimerController.primaryAction(context) },
+                onSnooze = { TimerController.snooze(context) },
                 onPrevious = { TimerController.previousLevel(context) },
                 onNext = { TimerController.nextLevel(context) },
                 onReset = { TimerController.reset(context) },
@@ -156,6 +158,24 @@ private fun ClockFace(state: TimerState, alarming: Boolean) {
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Black,
                 color = MaterialTheme.colorScheme.onError,
+            )
+            Spacer(Modifier.height(12.dp))
+        } else if (state.isSnoozed) {
+            // The blinds have already gone up; the alarm is only quiet for the moment. Say so, and
+            // show when it comes back, so a snooze never looks like the level simply ended.
+            Text(
+                text = stringResource(R.string.snoozed).uppercase(),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.error,
+            )
+            Text(
+                text = stringResource(
+                    R.string.snooze_ringing_in,
+                    formatRemaining(state.snoozeRemainingMs ?: 0L),
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(12.dp))
         }
@@ -218,6 +238,7 @@ private fun BlindsText(level: BlindLevel?, color: Color, fontSize: TextUnit) {
 private fun Controls(
     state: TimerState,
     onPrimary: () -> Unit,
+    onSnooze: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onReset: () -> Unit,
@@ -248,6 +269,18 @@ private fun Controls(
             ),
         ) {
             Text(text = primaryLabel, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        }
+
+        if (state.isAlarming) {
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = onSnooze,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+            ) {
+                Text(text = stringResource(R.string.snooze), fontSize = 18.sp)
+            }
         }
 
         Spacer(Modifier.height(4.dp))

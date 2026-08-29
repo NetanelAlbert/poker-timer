@@ -25,6 +25,8 @@ object TimerController {
 
     fun pause(context: Context) = act(context) { engine.pause() }
 
+    fun snooze(context: Context) = act(context) { engine.snooze() }
+
     fun nextLevel(context: Context) = act(context) { engine.nextLevel() }
 
     fun previousLevel(context: Context) = act(context) { engine.previousLevel() }

@@ -40,6 +40,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.netanelalbert.pokertimer.R
+import com.netanelalbert.pokertimer.model.TimerSettings
+import com.netanelalbert.pokertimer.timer.formatRemaining
 import kotlin.math.roundToInt
 
 /**
@@ -140,6 +142,32 @@ fun SettingsScreen(viewModel: PokerTimerViewModel, onBack: () -> Unit) {
                 onCheckedChange = { checked ->
                     viewModel.updateSettings { it.copy(vibrateEnabled = checked) }
                 },
+            )
+
+            var snoozeValue by remember(settings.snoozeSeconds) {
+                mutableStateOf(settings.snoozeSeconds.toFloat())
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = stringResource(R.string.snooze_length),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Text(
+                    text = formatRemaining(snoozeValue.roundToInt() * 1000L),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            Slider(
+                value = snoozeValue,
+                onValueChange = { snoozeValue = it },
+                onValueChangeFinished = {
+                    viewModel.updateSettings { it.copy(snoozeSeconds = snoozeValue.roundToInt()) }
+                },
+                valueRange = TimerSettings.MIN_SNOOZE_SECONDS.toFloat()..TimerSettings.MAX_SNOOZE_SECONDS.toFloat(),
+                steps = 19,
             )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
