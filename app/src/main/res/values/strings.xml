@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Poker Timer</string>
+
+    <!-- Screen titles -->
+    <string name="timer_title">Timer</string>
+    <string name="levels_title">Levels</string>
+    <string name="settings_title">Settings</string>
+
+    <!-- Timer controls -->
+    <string name="start">Start</string>
+    <string name="pause">Pause</string>
+    <string name="resume">Resume</string>
+    <string name="reset">Reset</string>
+    <string name="next_level">Next Level</string>
+    <string name="previous_level">Previous Level</string>
+    <string name="blinds_up">Blinds Up</string>
+    <string name="start_level">Start level %1$d</string>
+    <string name="level_of">Level %1$d of %2$d</string>
+
+    <!-- Level details -->
+    <string name="small_blind">Small Blind</string>
+    <string name="big_blind">Big Blind</string>
+    <string name="duration">Duration</string>
+    <string name="next_blinds">Next Blinds</string>
+    <string name="tournament_complete">Tournament Complete</string>
+
+    <!-- Level editing -->
+    <string name="add_level">Add Level</string>
+    <string name="delete_level">Delete Level</string>
+    <string name="apply_duration_to_all">Apply Duration to All</string>
+    <string name="move_up">Move Up</string>
+    <string name="move_down">Move Down</string>
+
+    <!-- Sounds -->
+    <string name="sound_alarm">Alarm</string>
+    <string name="sound_warning">Warning</string>
+    <string name="sound_chime">Chime</string>
+    <string name="sound_default">Default</string>
+    <string name="preview">Preview</string>
+
+    <!-- Settings -->
+    <string name="warning_enabled">Warning before blinds go up</string>
+    <string name="warning_lead_seconds">Warning Lead Time (seconds)</string>
+    <string name="chime_enabled">Chime when a level starts</string>
+    <string name="vibrate_enabled">Vibrate</string>
+    <string name="alarm_volume">Alarm Volume</string>
+    <string name="keep_screen_on">Keep Screen On</string>
+    <string name="reset_to_defaults">Reset to Defaults</string>
+    <string name="notification_permission_rationale">Poker Timer needs notification permission to show the running timer and alert you when it\'s time to raise the blinds.</string>
+
+    <!-- Notification channel -->
+    <string name="timer_channel_name">Timer</string>
+    <string name="timer_channel_description">Shows the running timer and blind level alerts</string>
+
+    <!-- Timer screen -->
+    <string name="blinds_format">%1$d / %2$d</string>
+    <string name="new_tournament">New tournament</string>
+
+    <!-- Ongoing notification -->
+    <string name="notification_running">Level %1$d &#8226; %2$s</string>
+    <string name="notification_paused">Paused &#8226; Level %1$d &#8226; %2$s</string>
+    <string name="notification_time_left">Time left in this level</string>
+    <string name="notification_tap_to_start">%1$s &#8212; tap to start level %2$d</string>
+
+    <!-- Levels and settings screens -->
+    <string name="level_number">Level %1$d</string>
+    <string name="settings_section_sounds">Sounds</string>
+    <string name="settings_section_alerts">Alerts</string>
+    <string name="settings_section_playback">Playback</string>
+    <string name="settings_section_reset">Reset</string>
+    <string name="warning_lead_seconds_value">%1$d s</string>
+    <string name="alarm_volume_value">%1$d%%</string>
+    <string name="reset_to_defaults_confirmation">Reset all settings, including the blind levels, to their defaults?</string>
+    <string name="cancel">Cancel</string>
+    <string name="pick_sound">Pick</string>
+</resources>

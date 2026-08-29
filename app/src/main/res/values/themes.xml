@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base application theme. This is only used for the launch/splash window;
+         all real theming is supplied by Jetpack Compose (see ui/theme/Theme.kt). -->
+    <style name="Theme.PokerTimer" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/felt_green</item>
+        <item name="android:statusBarColor">@color/felt_green</item>
+        <item name="android:navigationBarColor">@color/black</item>
+    </style>
+</resources>

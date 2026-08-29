@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Simple gold spade mark, kept inside the 72x72 adaptive-icon safe zone (x/y 18..90). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFD4AF37"
+        android:pathData="M54,22
+            C54,22 72,38 72,52
+            C72,64 62,68 56,62
+            C56,72 66,76 66,78
+            L42,78
+            C42,76 52,72 52,62
+            C46,68 36,64 36,52
+            C36,38 54,22 54,22
+            Z" />
+</vector>
