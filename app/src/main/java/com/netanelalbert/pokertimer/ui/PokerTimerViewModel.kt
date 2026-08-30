@@ -8,6 +8,7 @@ import com.netanelalbert.pokertimer.model.BlindLevel
 import com.netanelalbert.pokertimer.model.TimerSettings
 import com.netanelalbert.pokertimer.model.TimerState
 import com.netanelalbert.pokertimer.sound.AlarmPlayer
+import com.netanelalbert.pokertimer.sound.SoundSlot
 import com.netanelalbert.pokertimer.timer.TimerController
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -62,8 +63,8 @@ class PokerTimerViewModel(application: Application) : AndroidViewModel(applicati
     fun resetSettingsToDefaults() = updateSettings { TimerSettings() }
 
     /** Plays a sound once so the user can hear what they just picked. */
-    fun previewSound(uri: String?) {
-        previewPlayer.playOneShot(uri, settings.value.alarmVolume)
+    fun previewSound(uri: String?, slot: SoundSlot) {
+        previewPlayer.playOneShot(uri, slot, settings.value.alarmVolume)
     }
 
     override fun onCleared() {

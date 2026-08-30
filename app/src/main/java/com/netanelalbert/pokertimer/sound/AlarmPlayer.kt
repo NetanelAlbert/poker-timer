@@ -10,6 +10,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
+import com.netanelalbert.pokertimer.R
 
 /**
  * Plays the three tournament sounds.
@@ -42,7 +43,7 @@ class AlarmPlayer(private val context: Context) {
     /** Start the looping blinds-up alarm. Idempotent: calling it while it rings does nothing. */
     fun startAlarm(uri: String?, volume: Float, vibrate: Boolean) {
         if (alarmPlayer != null) return
-        alarmPlayer = createPlayer(uri, volume, looping = true)
+        alarmPlayer = createPlayer(uri, SoundSlot.ALARM, volume, looping = true)
         if (vibrate) startVibration()
     }
 
@@ -53,9 +54,9 @@ class AlarmPlayer(private val context: Context) {
     }
 
     /** Play a warning or start chime. A new one-shot cuts off any previous one-shot still playing. */
-    fun playOneShot(uri: String?, volume: Float) {
+    fun playOneShot(uri: String?, slot: SoundSlot, volume: Float) {
         oneShotPlayer?.releaseQuietly()
-        oneShotPlayer = createPlayer(uri, volume, looping = false)?.also { player ->
+        oneShotPlayer = createPlayer(uri, slot, volume, looping = false)?.also { player ->
             player.setOnCompletionListener {
                 it.releaseQuietly()
                 if (oneShotPlayer === it) oneShotPlayer = null
@@ -69,11 +70,18 @@ class AlarmPlayer(private val context: Context) {
         oneShotPlayer = null
     }
 
-    private fun createPlayer(uri: String?, volume: Float, looping: Boolean): MediaPlayer? {
-        // Fall back to the device alarm tone when the stored uri is unusable — the user may have
-        // picked a track that has since been deleted, and silence would be the worst outcome here.
+    private fun createPlayer(
+        uri: String?,
+        slot: SoundSlot,
+        volume: Float,
+        looping: Boolean,
+    ): MediaPlayer? {
+        // Tried in order: what the user picked, then this slot's own default, then the device
+        // tones as a last resort. A stored uri can stop working (the track was deleted, or the
+        // permission to read it went away) and silence would be the worst outcome here.
         val candidates = listOfNotNull(
             uri?.takeIf { it.isNotBlank() }?.let(Uri::parse),
+            defaultFor(slot),
             RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
             RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
         )
@@ -96,6 +104,20 @@ class AlarmPlayer(private val context: Context) {
         Log.w(TAG, "No playable sound found")
         return null
     }
+
+    /**
+     * The chime and the warning default to short bundled tones rather than a device ringtone.
+     * Ringtones and alarm tones run for seconds and are built to be loop-ready, which is right for
+     * the blinds-up alarm and wrong for a blip that only has to say "started" or "nearly up".
+     */
+    private fun defaultFor(slot: SoundSlot): Uri? = when (slot) {
+        SoundSlot.ALARM -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+        SoundSlot.WARNING -> rawUri(R.raw.warning)
+        SoundSlot.CHIME -> rawUri(R.raw.chime)
+    }
+
+    private fun rawUri(resId: Int): Uri =
+        Uri.parse("android.resource://${'$'}{context.packageName}/${'$'}resId")
 
     private fun startVibration() {
         val vibrator = vibrator ?: return

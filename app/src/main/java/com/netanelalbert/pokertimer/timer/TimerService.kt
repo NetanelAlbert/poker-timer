@@ -14,6 +14,7 @@ import com.netanelalbert.pokertimer.model.TimerSettings
 import com.netanelalbert.pokertimer.model.TimerPhase
 import com.netanelalbert.pokertimer.model.TimerState
 import com.netanelalbert.pokertimer.sound.AlarmPlayer
+import com.netanelalbert.pokertimer.sound.SoundSlot
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -127,10 +128,16 @@ class TimerService : Service() {
         engine.events.collect { event ->
             val current = settings.value
             when (event) {
-                TimerEvent.WARNING ->
-                    player.playOneShot(current.warningSoundUri, current.alarmVolume * WARNING_VOLUME_SCALE)
-                TimerEvent.LEVEL_STARTED ->
-                    player.playOneShot(current.chimeSoundUri, current.alarmVolume * CHIME_VOLUME_SCALE)
+                TimerEvent.WARNING -> player.playOneShot(
+                    current.warningSoundUri,
+                    SoundSlot.WARNING,
+                    current.alarmVolume * WARNING_VOLUME_SCALE,
+                )
+                TimerEvent.LEVEL_STARTED -> player.playOneShot(
+                    current.chimeSoundUri,
+                    SoundSlot.CHIME,
+                    current.alarmVolume * CHIME_VOLUME_SCALE,
+                )
             }
         }
     }

@@ -52,6 +52,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.netanelalbert.pokertimer.R
+import com.netanelalbert.pokertimer.sound.SoundSlot
 import com.netanelalbert.pokertimer.model.TimerSettings
 import com.netanelalbert.pokertimer.timer.formatRemaining
 import kotlin.math.roundToInt
@@ -103,19 +104,22 @@ fun SettingsScreen(viewModel: PokerTimerViewModel, onBack: () -> Unit) {
                 label = stringResource(R.string.sound_alarm),
                 currentUri = settings.alarmSoundUri,
                 onPicked = { uri -> viewModel.updateSettings { it.copy(alarmSoundUri = uri) } },
-                onPreview = { viewModel.previewSound(settings.alarmSoundUri) },
+                onPreview = { viewModel.previewSound(settings.alarmSoundUri, SoundSlot.ALARM) },
+                defaultLabel = stringResource(R.string.sound_default),
             )
             SoundRow(
                 label = stringResource(R.string.sound_warning),
                 currentUri = settings.warningSoundUri,
                 onPicked = { uri -> viewModel.updateSettings { it.copy(warningSoundUri = uri) } },
-                onPreview = { viewModel.previewSound(settings.warningSoundUri) },
+                onPreview = { viewModel.previewSound(settings.warningSoundUri, SoundSlot.WARNING) },
+                defaultLabel = stringResource(R.string.sound_built_in),
             )
             SoundRow(
                 label = stringResource(R.string.sound_chime),
                 currentUri = settings.chimeSoundUri,
                 onPicked = { uri -> viewModel.updateSettings { it.copy(chimeSoundUri = uri) } },
-                onPreview = { viewModel.previewSound(settings.chimeSoundUri) },
+                onPreview = { viewModel.previewSound(settings.chimeSoundUri, SoundSlot.CHIME) },
+                defaultLabel = stringResource(R.string.sound_built_in),
             )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
@@ -374,16 +378,18 @@ private fun SoundRow(
     currentUri: String?,
     onPicked: (String?) -> Unit,
     onPreview: () -> Unit,
+    // What "nothing picked" means differs per sound: the alarm falls back to the device alarm
+    // tone, the chime and warning to short bundled tones.
+    defaultLabel: String,
 ) {
     val context = LocalContext.current
-    val defaultName = stringResource(R.string.sound_default)
-    val soundName = remember(currentUri) {
+    val soundName = remember(currentUri, defaultLabel) {
         if (currentUri == null) {
-            defaultName
+            defaultLabel
         } else {
             runCatching {
                 RingtoneManager.getRingtone(context, Uri.parse(currentUri))?.getTitle(context)
-            }.getOrNull() ?: defaultName
+            }.getOrNull() ?: defaultLabel
         }
     }
 

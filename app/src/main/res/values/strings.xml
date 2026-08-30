@@ -36,7 +36,8 @@
     <string name="sound_alarm">Alarm</string>
     <string name="sound_warning">Warning</string>
     <string name="sound_chime">Chime</string>
-    <string name="sound_default">Default</string>
+    <string name="sound_default">Device alarm sound</string>
+    <string name="sound_built_in">Built-in short tone</string>
     <string name="preview">Preview</string>
 
     <!-- Settings -->

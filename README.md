@@ -11,7 +11,7 @@ If the alarm goes off mid-hand, **Snooze** silences it without advancing anythin
 ## Features
 
 - **Editable blind structure**: Add, remove, or reorder levels; apply a single duration to all levels
-- **Three configurable sounds**: Pick from system ringtone picker for blinds-up alarm, pre-end warning (with configurable lead time, default 30 seconds), and level-start chime
+- **Three configurable sounds**: Pick from system ringtone picker for blinds-up alarm, pre-end warning (with configurable lead time, default 30 seconds), and level-start chime. The alarm defaults to the device alarm tone; the warning and chime default to short built-in tones (~0.2s), since a ringtone is far too long for a confirmation blip
 - **Snooze**: Silence a ringing alarm and have it return after a configurable interval (default 2 minutes), without starting the next level; repeatable
 - **Vibration and volume control**: Enable/disable vibration; adjust alarm volume
 - **Screen-on behavior**: Option to keep screen on during the tournament
