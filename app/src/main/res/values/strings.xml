@@ -81,4 +81,16 @@
     <string name="snooze_ringing_in">Ringing again in %1$s</string>
     <string name="snooze_length">Snooze length</string>
     <string name="notification_snoozed">Snoozed \u2022 blinds are now %1$s</string>
+
+    <!-- Blinds-up alert -->
+    <string name="alarm_channel_name">Blinds up</string>
+    <string name="alarm_channel_description">The alert when a level ends and the blinds go up</string>
+
+    <!-- Permissions -->
+    <string name="settings_section_permissions">Permissions</string>
+    <string name="permission_full_screen">Show the timer when the blinds go up</string>
+    <string name="permission_full_screen_summary">Not allowed yet. Without this, a blinds-up alarm can only show a notification banner \u2014 it cannot bring the timer up over the lock screen. Tap to allow.</string>
+    <string name="permission_notifications">Show the timer notification</string>
+    <string name="permission_notifications_summary">Not allowed yet. Without this there is no on-screen sign of the running clock or the blinds-up alert. Tap to allow.</string>
+    <string name="permission_granted">Allowed</string>
 </resources>

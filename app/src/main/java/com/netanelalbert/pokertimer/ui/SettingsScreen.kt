@@ -1,11 +1,17 @@
 package com.netanelalbert.pokertimer.ui
 
+import android.Manifest
 import android.app.Activity
+import android.app.NotificationManager
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.RingtoneManager
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,15 +36,21 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.netanelalbert.pokertimer.R
 import com.netanelalbert.pokertimer.model.TimerSettings
 import com.netanelalbert.pokertimer.timer.formatRemaining
@@ -52,6 +64,18 @@ import kotlin.math.roundToInt
 fun SettingsScreen(viewModel: PokerTimerViewModel, onBack: () -> Unit) {
     val settings by viewModel.settings.collectAsState()
     var showResetDialog by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    @Suppress("DEPRECATION")
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var permissionsNonce by remember { mutableIntStateOf(0) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) permissionsNonce++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Scaffold(
         topBar = {
@@ -210,6 +234,53 @@ fun SettingsScreen(viewModel: PokerTimerViewModel, onBack: () -> Unit) {
             ) {
                 Text(stringResource(R.string.reset_to_defaults))
             }
+
+            val showNotificationsRow = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+            val showFullScreenRow = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+
+            if (showNotificationsRow || showFullScreenRow) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                SectionHeader(text = stringResource(R.string.settings_section_permissions))
+
+                if (showNotificationsRow) {
+                    val notificationsGranted = remember(permissionsNonce) {
+                        ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.POST_NOTIFICATIONS,
+                        ) == PackageManager.PERMISSION_GRANTED
+                    }
+                    PermissionRow(
+                        title = stringResource(R.string.permission_notifications),
+                        granted = notificationsGranted,
+                        summaryWhenMissing = stringResource(R.string.permission_notifications_summary),
+                        onRequest = {
+                            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            runCatching { context.startActivity(intent) }
+                        },
+                    )
+                }
+
+                if (showFullScreenRow) {
+                    val fullScreenGranted = remember(permissionsNonce) {
+                        context.getSystemService(NotificationManager::class.java)
+                            ?.canUseFullScreenIntent() == true
+                    }
+                    PermissionRow(
+                        title = stringResource(R.string.permission_full_screen),
+                        granted = fullScreenGranted,
+                        summaryWhenMissing = stringResource(R.string.permission_full_screen_summary),
+                        onRequest = {
+                            val intent = Intent(
+                                Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                                Uri.parse("package:${context.packageName}"),
+                            )
+                            runCatching { context.startActivity(intent) }
+                        },
+                    )
+                }
+            }
         }
     }
 
@@ -262,6 +333,38 @@ private fun SettingsSwitchRow(
             modifier = Modifier.padding(vertical = 12.dp),
         )
         Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun PermissionRow(
+    title: String,
+    granted: Boolean,
+    summaryWhenMissing: String,
+    onRequest: () -> Unit,
+) {
+    val rowModifier = if (granted) {
+        Modifier.fillMaxWidth()
+    } else {
+        Modifier
+            .fillMaxWidth()
+            .clickable { onRequest() }
+    }
+    Column(modifier = rowModifier.padding(vertical = 8.dp)) {
+        Text(text = title, style = MaterialTheme.typography.bodyLarge)
+        if (granted) {
+            Text(
+                text = stringResource(R.string.permission_granted),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Text(
+                text = summaryWhenMissing,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
     }
 }
 

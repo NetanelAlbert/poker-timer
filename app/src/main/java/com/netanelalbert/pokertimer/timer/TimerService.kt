@@ -83,6 +83,7 @@ class TimerService : Service() {
 
     override fun onDestroy() {
         player.release()
+        cancelAlarmNotification()
         releaseWakeLock()
         scope.cancel()
         super.onDestroy()
@@ -116,6 +117,7 @@ class TimerService : Service() {
                 syncWakeLock(state)
                 if (startedForeground) {
                     postNotification(state)
+                    syncAlarmNotification(state)
                     stopIfIdle(state)
                 }
             }
@@ -131,6 +133,30 @@ class TimerService : Service() {
                     player.playOneShot(current.chimeSoundUri, current.alarmVolume * CHIME_VOLUME_SCALE)
             }
         }
+    }
+
+    /**
+     * Put the blinds-up alert on screen for as long as the alarm is sounding, and take it away the
+     * moment it is acknowledged or snoozed. This is what makes the alarm visible: the ongoing clock
+     * notification is deliberately silent and low priority, so on its own it left the sound with no
+     * apparent source.
+     */
+    private fun syncAlarmNotification(state: TimerState) {
+        runCatching {
+            val manager = NotificationManagerCompat.from(this)
+            if (state.isAlarming) {
+                manager.notify(
+                    TimerNotifications.ALARM_NOTIFICATION_ID,
+                    TimerNotifications.buildAlarm(this, state),
+                )
+            } else {
+                manager.cancel(TimerNotifications.ALARM_NOTIFICATION_ID)
+            }
+        }
+    }
+
+    private fun cancelAlarmNotification() {
+        runCatching { NotificationManagerCompat.from(this).cancel(TimerNotifications.ALARM_NOTIFICATION_ID) }
     }
 
     private fun syncAlarm(state: TimerState) {
@@ -195,6 +221,7 @@ class TimerService : Service() {
         if (state.needsService) return
         scope.launch { repository.saveSession(state.displayLevelIndex, state.remainingMs) }
         player.stopAlarm()
+        cancelAlarmNotification()
         releaseWakeLock()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         startedForeground = false

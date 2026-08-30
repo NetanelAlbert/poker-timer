@@ -16,11 +16,13 @@ import com.netanelalbert.pokertimer.model.TimerState
 object TimerNotifications {
 
     const val CHANNEL_ID = "poker_timer_clock"
+    const val ALARM_CHANNEL_ID = "poker_timer_alarm"
     const val NOTIFICATION_ID = 1
+    const val ALARM_NOTIFICATION_ID = 2
 
     fun ensureChannel(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
-        val channel = NotificationChannel(
+        val clock = NotificationChannel(
             CHANNEL_ID,
             context.getString(R.string.timer_channel_name),
             // Low importance on purpose: this notification is a readout, not an alert. The
@@ -33,7 +35,74 @@ object TimerNotifications {
             setSound(null, null)
             enableVibration(false)
         }
-        manager.createNotificationChannel(channel)
+
+        // The blinds-up alert needs its own high-importance channel so it actually breaks through
+        // as a heads-up banner. It is still silent: AlarmPlayer owns the sound and the vibration,
+        // and a channel sound here would play a second tone over the top of the alarm.
+        val alarm = NotificationChannel(
+            ALARM_CHANNEL_ID,
+            context.getString(R.string.alarm_channel_name),
+            NotificationManager.IMPORTANCE_HIGH,
+        ).apply {
+            description = context.getString(R.string.alarm_channel_description)
+            setShowBadge(true)
+            setSound(null, null)
+            enableVibration(false)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+        }
+
+        manager.createNotificationChannels(listOf(clock, alarm))
+    }
+
+    /**
+     * The alert that fires when the blinds go up.
+     *
+     * Separate from the ongoing clock notification on purpose. That one is a silent readout and
+     * has to stay that way, so it cannot also be the thing that grabs attention — updating it in
+     * place produced an alarm you could hear but not see. This one carries a full-screen intent,
+     * which is the sanctioned way for the app to put itself in front of the user: on a locked or
+     * dark screen the system launches the timer directly, and otherwise it shows as a heads-up
+     * banner naming the app.
+     */
+    fun buildAlarm(context: Context, state: TimerState): Notification {
+        val levelNumber = state.displayLevelIndex + 1
+        val blinds = state.currentLevel?.let {
+            context.getString(R.string.blinds_format, it.smallBlind, it.bigBlind)
+        }.orEmpty()
+        val hasNext = (state.phase as? TimerPhase.LevelEnded)?.nextLevelIndex != null
+
+        return NotificationCompat.Builder(context, ALARM_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_timer)
+            .setContentTitle(context.getString(R.string.blinds_up))
+            .setContentText(
+                if (hasNext) {
+                    context.getString(R.string.notification_tap_to_start, blinds, levelNumber)
+                } else {
+                    context.getString(R.string.tournament_complete)
+                }
+            )
+            .setContentIntent(contentIntent(context))
+            .setFullScreenIntent(contentIntent(context), true)
+            .setOngoing(true)
+            .setSilent(true)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .apply {
+                if (hasNext) {
+                    addAction(
+                        0,
+                        context.getString(R.string.start_level, levelNumber),
+                        serviceIntent(context, TimerService.ACTION_PRIMARY, 1),
+                    )
+                    addAction(
+                        0,
+                        context.getString(R.string.snooze),
+                        serviceIntent(context, TimerService.ACTION_SNOOZE, 4),
+                    )
+                }
+            }
+            .build()
     }
 
     fun build(context: Context, state: TimerState): Notification {
@@ -127,7 +196,11 @@ object TimerNotifications {
 
     private fun contentIntent(context: Context): PendingIntent {
         val intent = Intent(context, MainActivity::class.java)
-            .setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            .setFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP
+            )
         return PendingIntent.getActivity(
             context, 0, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,

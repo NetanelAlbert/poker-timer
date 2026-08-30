@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalView
@@ -31,6 +32,14 @@ class MainActivity : ComponentActivity() {
             PokerTimerTheme {
                 val viewModel: PokerTimerViewModel = viewModel()
                 val settings by viewModel.settings.collectAsState()
+                val timerState by viewModel.timerState.collectAsState()
+
+                // A blinds-up alarm arrives by full-screen intent, which can land on a locked or
+                // dark phone. Without these the activity would be launched and then hidden behind
+                // the keyguard, which is exactly the "I can hear it but cannot see it" problem.
+                LaunchedEffect(timerState.isAlarming) {
+                    showOverLockScreen(timerState.isAlarming)
+                }
 
                 // The clock is meant to be readable from across the table for a whole level, so
                 // honour the setting by holding the screen awake while the app is in front.
@@ -39,6 +48,13 @@ class MainActivity : ComponentActivity() {
 
                 PokerTimerNavHost(viewModel = viewModel)
             }
+        }
+    }
+
+    private fun showOverLockScreen(show: Boolean) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(show)
+            setTurnScreenOn(show)
         }
     }
 
