@@ -10,3 +10,4 @@
 .cxx
 *.apk
 *.keystore
+!/app/debug.keystore

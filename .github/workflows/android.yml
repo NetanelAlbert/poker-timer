@@ -6,6 +6,10 @@ on:
       - '**'
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -27,11 +31,19 @@ jobs:
 
       - run: ./gradlew assembleDebug --stacktrace
 
+      - run: ./gradlew lintDebug --stacktrace
+
       - uses: actions/upload-artifact@v4
         with:
-          name: poker-timer-debug-apk
+          name: poker-timer-debug-apk-${{ github.sha }}
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lint-report-${{ github.sha }}
+          path: app/build/reports/lint-results-debug.html
+          if-no-files-found: warn
 
       - if: failure()
         uses: actions/upload-artifact@v4

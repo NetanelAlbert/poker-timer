@@ -49,6 +49,7 @@ Produces: `app/build/outputs/apk/debug/app-debug.apk`
 - **Wake lock for background timing**: A foreground service alone does not keep the CPU awake. The service holds a `PowerManager.PARTIAL_WAKE_LOCK` while the clock is live, ensuring the alarm fires on schedule even with the screen off.
 - **Efficient notifications**: The notification uses a countdown chronometer that updates itself, so the notification state only rebuilds when the phase or level changes, not on every tick.
 - **Fully testable state machine**: `TimerEngine` takes its clock as an injected function `() -> Long`, making the entire state machine unit-testable on the JVM without Android mocks (see `app/src/test/`).
+- **Alarm audio stream**: The alarm plays on the alarm stream via `USAGE_ALARM` and does not request audio focus, matching system alarm-clock behaviour. This is deliberate. Behaviour during an active phone call is untested.
 
 ## Permissions
 
@@ -59,3 +60,4 @@ Produces: `app/build/outputs/apk/debug/app-debug.apk`
 | `FOREGROUND_SERVICE_SPECIAL_USE` | Declare the service as a tournament clock (used on API 34+) |
 | `WAKE_LOCK` | Hold a partial wake lock to keep the CPU awake while timing with the screen off |
 | `VIBRATE` | Vibrate the device when the alarm sounds |
+| `USE_FULL_SCREEN_INTENT` | Put the blinds-up alarm on screen over the keyguard, rather than only making a noise from nowhere |
