@@ -17,6 +17,7 @@ import com.netanelalbert.pokertimer.sound.AlarmPlayer
 import com.netanelalbert.pokertimer.sound.SoundSlot
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Keeps the tournament clock alive while the app is backgrounded or the screen is off — which is
@@ -74,7 +76,12 @@ class TimerService : Service() {
             ACTION_PRIMARY -> engine.primaryAction()
             ACTION_SNOOZE -> engine.snooze()
             ACTION_NEXT -> engine.nextLevel()
-            ACTION_RESET -> engine.reset()
+            ACTION_RESET -> {
+                engine.reset()
+                // stopIfIdle below will persist the fresh position anyway, but clearing here means
+                // there is never a window where a stale saved session outlives the reset.
+                scope.launch { repository.clearSession() }
+            }
         }
         stopIfIdle(engine.state.value)
         // Not sticky: a restarted service would come back with an empty engine and no way to know
@@ -96,17 +103,46 @@ class TimerService : Service() {
      */
     private suspend fun runClock() {
         var lastSessionSave = 0L
+        var lastWakeLockRenewal = 0L
         while (scope.isActive) {
             engine.tick()
             val state = engine.state.value
             val now = System.currentTimeMillis()
-            if (state.isRunning && now - lastSessionSave > SESSION_SAVE_INTERVAL_MS) {
-                lastSessionSave = now
-                repository.saveSession(state.displayLevelIndex, state.remainingMs)
+            if (now - lastSessionSave > SESSION_SAVE_INTERVAL_MS) {
+                sessionSnapshot(state)?.let { (level, remaining, levelEnded) ->
+                    lastSessionSave = now
+                    repository.saveSession(level, remaining, levelEnded)
+                }
+            }
+            // syncWakeLock only (re)acquires on a phase change, so a long-ringing alarm — one
+            // unbroken phase — would otherwise never renew the lock's 8-hour safety timeout. This
+            // keeps it topped up for as long as the clock actually needs the CPU.
+            if (state.needsService && now - lastWakeLockRenewal > WAKE_LOCK_RENEWAL_INTERVAL_MS) {
+                lastWakeLockRenewal = now
+                acquireWakeLock()
             }
             delay(TICK_INTERVAL_MS)
         }
     }
+
+    /**
+     * What to persist for [state], and whether it should come back as a bare countdown or as an
+     * alarm-adjacent position — see [SettingsRepository.saveSession]. Null while there is nothing
+     * worth remembering (parked or finished).
+     */
+    private fun sessionSnapshot(state: TimerState): Triple<Int, Long, Boolean>? =
+        when (val phase = state.phase) {
+            is TimerPhase.Running -> Triple(phase.levelIndex, state.remainingMs, false)
+            is TimerPhase.LevelEnded -> {
+                // displayLevelIndex/remainingMs already point at the next level's full duration;
+                // when there is no next level (the tournament just finished) fall back to the level
+                // that just ended rather than persisting a zero that would coerce restore() down to
+                // "no saved session" and quietly reset the position.
+                val target = phase.nextLevelIndex ?: phase.finishedLevelIndex
+                Triple(target, state.levels[target].durationMs, true)
+            }
+            else -> null
+        }
 
     private suspend fun observeState() {
         // The notification carries a self-ticking chronometer, so it only has to be rebuilt when
@@ -127,17 +163,20 @@ class TimerService : Service() {
     private suspend fun observeEvents() {
         engine.events.collect { event ->
             val current = settings.value
-            when (event) {
-                TimerEvent.WARNING -> player.playOneShot(
-                    current.warningSoundUri,
-                    SoundSlot.WARNING,
-                    current.alarmVolume * WARNING_VOLUME_SCALE,
-                )
-                TimerEvent.LEVEL_STARTED -> player.playOneShot(
-                    current.chimeSoundUri,
-                    SoundSlot.CHIME,
-                    current.alarmVolume * CHIME_VOLUME_SCALE,
-                )
+            // See syncAlarm for why this has to leave Main.
+            withContext(Dispatchers.IO) {
+                when (event) {
+                    TimerEvent.WARNING -> player.playOneShot(
+                        current.warningSoundUri,
+                        SoundSlot.WARNING,
+                        current.alarmVolume * WARNING_VOLUME_SCALE,
+                    )
+                    TimerEvent.LEVEL_STARTED -> player.playOneShot(
+                        current.chimeSoundUri,
+                        SoundSlot.CHIME,
+                        current.alarmVolume * CHIME_VOLUME_SCALE,
+                    )
+                }
             }
         }
     }
@@ -166,7 +205,14 @@ class TimerService : Service() {
         runCatching { NotificationManagerCompat.from(this).cancel(TimerNotifications.ALARM_NOTIFICATION_ID) }
     }
 
-    private fun syncAlarm(state: TimerState) {
+    /**
+     * `AlarmPlayer.createPlayer` calls the synchronous, blocking `MediaPlayer.prepare()`, which on a
+     * user-picked `content://` uri can mean an IPC round trip to another app's ContentProvider —
+     * calling that straight from Main risked stalling the UI thread at the exact moment the alarm
+     * was due. Awaited here rather than `scope.launch`'d so consecutive states are still handled one
+     * at a time: a stop can never overtake a start from a later state racing ahead of an earlier one.
+     */
+    private suspend fun syncAlarm(state: TimerState) = withContext(Dispatchers.IO) {
         if (state.isAlarming) {
             val current = settings.value
             player.startAlarm(current.alarmSoundUri, current.alarmVolume, current.vibrateEnabled)
@@ -184,7 +230,13 @@ class TimerService : Service() {
     }
 
     private fun acquireWakeLock() {
-        if (wakeLock?.isHeld == true) return
+        val existing = wakeLock
+        if (existing?.isHeld == true) {
+            // Non-reference-counted, so re-acquiring a lock we already hold is safe and simply pushes
+            // its safety timeout back out — this is the renewal call from runClock's periodic check.
+            existing.acquire(WAKE_LOCK_TIMEOUT_MS)
+            return
+        }
         val manager = getSystemService(PowerManager::class.java) ?: return
         wakeLock = manager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG).apply {
             setReferenceCounted(false)
@@ -226,7 +278,9 @@ class TimerService : Service() {
 
     private fun stopIfIdle(state: TimerState) {
         if (state.needsService) return
-        scope.launch { repository.saveSession(state.displayLevelIndex, state.remainingMs) }
+        // NonCancellable: onDestroy cancels `scope` right after stopSelf(), and this write must not
+        // be lost in that race — it's the one that lands the final, settled position.
+        scope.launch { withContext(NonCancellable) { repository.saveSession(state.displayLevelIndex, state.remainingMs) } }
         player.stopAlarm()
         cancelAlarmNotification()
         releaseWakeLock()
@@ -245,6 +299,7 @@ class TimerService : Service() {
 
         private const val TICK_INTERVAL_MS = 200L
         private const val SESSION_SAVE_INTERVAL_MS = 5_000L
+        private const val WAKE_LOCK_RENEWAL_INTERVAL_MS = 60L * 60 * 1000
         private const val WAKE_LOCK_TAG = "PokerTimer:clock"
 
         /** A safety net, not a budget: no single blind level should ever run this long. */

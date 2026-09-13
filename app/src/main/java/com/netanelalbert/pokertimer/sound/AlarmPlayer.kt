@@ -86,8 +86,13 @@ class AlarmPlayer(private val context: Context) {
             RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
         )
         for (candidate in candidates) {
-            val player = runCatching {
-                MediaPlayer().apply {
+            // Constructed outside runCatching so a failure between here and `start()` still has a
+            // handle to release — leaving a failed setDataSource/prepare unreleased leaks a native
+            // MediaPlayer for every alarm, warning, chime and snooze re-ring for the rest of the
+            // tournament.
+            val player = MediaPlayer()
+            val prepared = runCatching {
+                player.apply {
                     setAudioAttributes(audioAttributes)
                     setDataSource(context, candidate)
                     isLooping = looping
@@ -97,9 +102,10 @@ class AlarmPlayer(private val context: Context) {
                 }
             }.getOrElse { error ->
                 Log.w(TAG, "Could not play $candidate", error)
+                player.releaseQuietly()
                 null
             }
-            if (player != null) return player
+            if (prepared != null) return prepared
         }
         Log.w(TAG, "No playable sound found")
         return null
