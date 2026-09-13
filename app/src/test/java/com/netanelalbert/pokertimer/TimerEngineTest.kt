@@ -629,4 +629,111 @@ class TimerEngineTest {
         engine.tick()
         assertEquals(0.5f, engine.state.value.progress, 0.001f)
     }
+
+    @Test
+    fun `undo after reset restores the exact prior running phase`() {
+        val engine = engine()
+        engine.primaryAction()
+        clock.advance(90_000L)
+        engine.tick()
+        val before = engine.state.value.phase
+        val remainingBefore = engine.state.value.remainingMs
+
+        engine.reset()
+        assertEquals(TimerPhase.Ready(0, 600_000L), engine.state.value.phase)
+
+        engine.undo()
+
+        assertEquals("the exact prior phase, deadline included, must come back", before, engine.state.value.phase)
+        assertEquals(remainingBefore, engine.state.value.remainingMs)
+    }
+
+    @Test
+    fun `undo after a skip restores the previous level and its remaining time`() {
+        val engine = engine()
+        engine.goToLevel(1)
+        engine.primaryAction()
+        clock.advance(60_000L)
+        engine.tick()
+        val before = engine.state.value.phase
+        val remainingBefore = engine.state.value.remainingMs
+
+        engine.nextLevel()
+        assertEquals(2, engine.state.value.displayLevelIndex)
+
+        engine.undo()
+
+        assertEquals(before, engine.state.value.phase)
+        assertEquals(remainingBefore, engine.state.value.remainingMs)
+        assertEquals(1, engine.state.value.displayLevelIndex)
+    }
+
+    @Test
+    fun `undo does nothing when nothing is snapshotted`() {
+        val engine = engine()
+        engine.primaryAction()
+        val phase = engine.state.value.phase
+
+        engine.undo()
+
+        assertEquals(phase, engine.state.value.phase)
+    }
+
+    @Test
+    fun `undo is ignored once its window has passed`() {
+        val engine = engine()
+        engine.primaryAction()
+        clock.advance(60_000L)
+        engine.tick()
+
+        engine.reset()
+        val afterReset = engine.state.value.phase
+
+        // Comfortably past any reasonable undo window (which is only meant to outlive a snackbar).
+        clock.advance(60_000L)
+        engine.undo()
+
+        assertEquals("a stale undo must be a no-op", afterReset, engine.state.value.phase)
+    }
+
+    @Test
+    fun `a second destructive action replaces the snapshot so undo only reverts the most recent one`() {
+        val engine = engine()
+        engine.primaryAction()
+        clock.advance(60_000L)
+        engine.tick()
+
+        engine.nextLevel()
+        val afterFirstSkip = engine.state.value.phase
+
+        engine.previousLevel()
+
+        engine.undo()
+
+        assertEquals(
+            "undo must reverse only the second skip, not resurrect the state from before the first",
+            afterFirstSkip,
+            engine.state.value.phase,
+        )
+    }
+
+    @Test
+    fun `a no-op action after a destructive one does not clobber its snapshot`() {
+        val engine = engine()
+        engine.goToLevel(2)
+        engine.primaryAction()
+        clock.advance(30_000L)
+        engine.tick()
+        val before = engine.state.value.phase
+        val remainingBefore = engine.state.value.remainingMs
+
+        engine.reset()
+        // Already at level 0: stepping back is a no-op and must not overwrite the reset's snapshot.
+        engine.previousLevel()
+
+        engine.undo()
+
+        assertEquals(before, engine.state.value.phase)
+        assertEquals(remainingBefore, engine.state.value.remainingMs)
+    }
 }

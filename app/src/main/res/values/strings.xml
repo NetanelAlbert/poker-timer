@@ -76,6 +76,11 @@
     <string name="cancel">Cancel</string>
     <string name="pick_sound">Pick</string>
 
+    <!-- Undo -->
+    <string name="undo">Undo</string>
+    <string name="reset_undone_message">Timer reset</string>
+    <string name="skip_undone_message">Jumped to level %1$d</string>
+
     <!-- Snooze -->
     <string name="snooze">Snooze</string>
     <string name="snoozed">Snoozed</string>
