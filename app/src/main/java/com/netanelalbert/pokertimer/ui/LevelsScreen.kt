@@ -194,7 +194,7 @@ private fun LevelRow(
                     onValueChange = { text ->
                         smallBlindText = text
                         text.toIntOrNull()?.let { parsed ->
-                            onCommit(level.copy(smallBlind = parsed))
+                            onCommit(level.copy(smallBlind = parsed.coerceAtLeast(1)))
                         }
                     },
                     label = { Text(stringResource(R.string.small_blind)) },
@@ -207,10 +207,14 @@ private fun LevelRow(
                     onValueChange = { text ->
                         bigBlindText = text
                         text.toIntOrNull()?.let { parsed ->
-                            onCommit(level.copy(bigBlind = parsed))
+                            onCommit(level.copy(bigBlind = parsed.coerceAtLeast(1)))
                         }
                     },
                     label = { Text(stringResource(R.string.big_blind)) },
+                    // Flagged but never blocked: mid-typing states (clearing the field, typing a
+                    // smaller big blind before adjusting the small blind next) are legitimate, so
+                    // this is a visible nudge rather than a rejected keystroke.
+                    isError = bigBlindText.toIntOrNull()?.let { it < level.smallBlind } ?: false,
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.weight(1f),
