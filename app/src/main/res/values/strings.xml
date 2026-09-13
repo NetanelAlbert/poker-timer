@@ -3,7 +3,6 @@
     <string name="app_name">Poker Timer</string>
 
     <!-- Screen titles -->
-    <string name="timer_title">Timer</string>
     <string name="levels_title">Levels</string>
     <string name="settings_title">Settings</string>
 
@@ -11,6 +10,8 @@
     <string name="start">Start</string>
     <string name="pause">Pause</string>
     <string name="resume">Resume</string>
+    <!-- State label on the clock face itself, distinct from the "Pause" button above -->
+    <string name="paused">Paused</string>
     <string name="reset">Reset</string>
     <string name="next_level">Next Level</string>
     <string name="previous_level">Previous Level</string>
@@ -48,7 +49,6 @@
     <string name="alarm_volume">Alarm Volume</string>
     <string name="keep_screen_on">Keep Screen On</string>
     <string name="reset_to_defaults">Reset to Defaults</string>
-    <string name="notification_permission_rationale">Poker Timer needs notification permission to show the running timer and alert you when it\'s time to raise the blinds.</string>
 
     <!-- Notification channel -->
     <string name="timer_channel_name">Timer</string>

@@ -1,17 +1,20 @@
 package com.netanelalbert.pokertimer.ui
 
+import android.content.res.Configuration
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -38,10 +41,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -81,6 +86,11 @@ fun TimerScreen(
         label = "background",
     )
 
+    // The manifest handles orientation changes itself (no activity recreation), so this has to
+    // reflow on every rotation rather than relying on separate layout resources.
+    val isLandscape =
+        LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -97,23 +107,60 @@ fun TimerScreen(
 
             Spacer(Modifier.height(8.dp))
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.Center,
-            ) {
-                ClockFace(state = state, alarming = alarming)
-            }
+            if (isLandscape) {
+                // A phone propped on the table in landscape has very little height to give: put
+                // the clock and the controls side by side instead of stacking them, so the clock
+                // — the one thing that matters — gets the full height of the screen to work with
+                // instead of whatever the buttons below it leave over.
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        ClockFace(state = state, alarming = alarming)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Controls(
+                            state = state,
+                            onPrimary = { TimerController.primaryAction(context) },
+                            onSnooze = { TimerController.snooze(context) },
+                            onPrevious = { TimerController.previousLevel(context) },
+                            onNext = { TimerController.nextLevel(context) },
+                            onReset = { TimerController.reset(context) },
+                        )
+                    }
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ClockFace(state = state, alarming = alarming)
+                }
 
-            Controls(
-                state = state,
-                onPrimary = { TimerController.primaryAction(context) },
-                onSnooze = { TimerController.snooze(context) },
-                onPrevious = { TimerController.previousLevel(context) },
-                onNext = { TimerController.nextLevel(context) },
-                onReset = { TimerController.reset(context) },
-            )
+                Controls(
+                    state = state,
+                    onPrimary = { TimerController.primaryAction(context) },
+                    onSnooze = { TimerController.snooze(context) },
+                    onPrevious = { TimerController.previousLevel(context) },
+                    onNext = { TimerController.nextLevel(context) },
+                    onReset = { TimerController.reset(context) },
+                )
+            }
         }
     }
 }
@@ -141,83 +188,119 @@ private fun HeaderRow(state: TimerState, onOpenLevels: () -> Unit, onOpenSetting
 
 @Composable
 private fun ClockFace(state: TimerState, alarming: Boolean) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        if (state.phase is TimerPhase.Finished) {
-            Text(
-                text = stringResource(R.string.tournament_complete),
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.primary,
-                textAlign = TextAlign.Center,
-            )
-            return@Column
-        }
+    if (state.phase is TimerPhase.Finished) {
+        Text(
+            text = stringResource(R.string.tournament_complete),
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.primary,
+            textAlign = TextAlign.Center,
+        )
+        return
+    }
 
-        if (alarming) {
-            Text(
-                text = stringResource(R.string.blinds_up),
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Black,
-                color = MaterialTheme.colorScheme.onError,
-            )
-            Spacer(Modifier.height(12.dp))
-        } else if (state.isSnoozed) {
-            // The blinds have already gone up; the alarm is only quiet for the moment. Say so, and
-            // show when it comes back, so a snooze never looks like the level simply ended.
-            Text(
-                text = stringResource(R.string.snoozed).uppercase(),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.error,
-            )
-            Text(
-                text = stringResource(
-                    R.string.snooze_ringing_in,
-                    formatRemaining(state.snoozeRemainingMs ?: 0L),
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(12.dp))
-        }
+    // A paused clock parked mid-level and a running one differ only in whether the digits are
+    // moving — invisible at a glance from across a table — so the ring color itself has to carry
+    // "is this actually counting down". A snoozed clock gets the error color instead: it looks
+    // parked at 0% just like a level that hasn't started, but a tap is still owed.
+    val ringColor = when {
+        alarming -> MaterialTheme.colorScheme.onError
+        state.isSnoozed -> MaterialTheme.colorScheme.error
+        state.isRunning -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val paused = !state.isRunning && !state.isAtLevelStart && !alarming && !state.isSnoozed
 
-        Box(contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(
-                progress = { state.progress },
-                modifier = Modifier.size(300.dp),
-                strokeWidth = 10.dp,
-                color = if (alarming) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant,
-            )
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    // The ring's hard-coded 300dp only ever fit a tall portrait screen. Deriving it from the
+    // smaller of the two available dimensions lets it fill a short landscape pane instead of
+    // clipping against it, and the countdown font follows the same measurement so it never
+    // outgrows the ring that surrounds it.
+    BoxWithConstraints(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center,
+    ) {
+        val ringSize = (minOf(maxWidth, maxHeight) * 0.8f).coerceIn(160.dp, 320.dp)
+        val countdownFontSize = (ringSize.value * 0.25f).sp
+        val blindsFontSize = (ringSize.value * 0.13f).sp
+
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            if (alarming) {
                 Text(
-                    text = formatRemaining(state.remainingMs),
-                    fontSize = 76.sp,
+                    text = stringResource(R.string.blinds_up),
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.onError,
+                )
+                Spacer(Modifier.height(12.dp))
+            } else if (state.isSnoozed) {
+                // The blinds have already gone up; the alarm is only quiet for the moment. Say so,
+                // and show when it comes back, so a snooze never looks like the level simply ended.
+                Text(
+                    text = stringResource(R.string.snoozed).uppercase(),
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    maxLines = 1,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                Text(
+                    text = stringResource(
+                        R.string.snooze_ringing_in,
+                        formatRemaining(state.snoozeRemainingMs ?: 0L),
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+            } else if (paused) {
+                Text(
+                    text = stringResource(R.string.paused).uppercase(),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+            }
+
+            Box(contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(
+                    progress = { state.progress },
+                    modifier = Modifier.size(ringSize),
+                    strokeWidth = 10.dp,
+                    color = ringColor,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = formatRemaining(state.remainingMs),
+                        style = MaterialTheme.typography.displayLarge.copy(
+                            fontSize = countdownFontSize,
+                            lineHeight = TextUnit.Unspecified,
+                        ),
+                        color = MaterialTheme.colorScheme.onBackground,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    BlindsText(
+                        level = state.currentLevel,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = blindsFontSize,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            val next = state.nextLevel
+            if (next != null) {
+                Text(
+                    text = stringResource(R.string.next_blinds).uppercase(),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 BlindsText(
-                    level = state.currentLevel,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontSize = 40.sp,
+                    level = next,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 22.sp,
                 )
             }
-        }
-
-        Spacer(Modifier.height(20.dp))
-
-        val next = state.nextLevel
-        if (next != null) {
-            Text(
-                text = stringResource(R.string.next_blinds).uppercase(),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            BlindsText(
-                level = next,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 22.sp,
-            )
         }
     }
 }
@@ -231,6 +314,7 @@ private fun BlindsText(level: BlindLevel?, color: Color, fontSize: TextUnit) {
         fontWeight = FontWeight.SemiBold,
         color = color,
         maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
     )
 }
 
@@ -268,7 +352,13 @@ private fun Controls(
                 contentColor = MaterialTheme.colorScheme.onPrimary,
             ),
         ) {
-            Text(text = primaryLabel, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            Text(
+                text = primaryLabel,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
 
         if (state.isAlarming) {
