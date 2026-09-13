@@ -237,6 +237,19 @@ class TimerEngineTest {
     }
 
     @Test
+    fun `reset from a sounding alarm returns to the top of the structure, parked`() {
+        val engine = engineAtAlarm()
+        engine.snooze()
+
+        engine.reset()
+
+        val state = engine.state.value
+        assertEquals(TimerPhase.Ready(0, 600_000L), state.phase)
+        assertFalse(state.needsService)
+        assertNull(state.snoozeRemainingMs)
+    }
+
+    @Test
     fun `editing the structure mid-level keeps the clock where it is`() {
         val engine = engine()
         engine.goToLevel(1)
@@ -264,6 +277,60 @@ class TimerEngineTest {
             600_000L,
             engine.state.value.remainingMs,
         )
+    }
+
+    @Test
+    fun `shrinking the structure while running rebases the deadline to the new level's duration`() {
+        val engine = engine()
+        engine.goToLevel(2)
+        engine.primaryAction()
+        clock.advance(90_000L)
+        engine.tick()
+
+        // Level 2 (120s) is dropped entirely; the running index clamps onto level 1 (300s), which
+        // is shorter than the ~30s actually left, so the old deadline can't simply be kept.
+        engine.setLevels(listOf(levels[0], levels[1]))
+
+        val phase = engine.state.value.phase as TimerPhase.Running
+        assertEquals(1, phase.levelIndex)
+        assertEquals(TimerPhase.Running(1, clock.now + 300_000L), phase)
+        assertEquals(300_000L, engine.state.value.remainingMs)
+    }
+
+    @Test
+    fun `reordering the structure while running rebases when the new level no longer fits`() {
+        val engine = engine()
+        engine.goToLevel(1)
+        engine.primaryAction()
+        clock.advance(60_000L)
+        engine.tick()
+
+        // Same length and same index, but the level now sitting at index 1 is the old level 2
+        // (120s) — far shorter than the ~240s actually remaining.
+        engine.setLevels(listOf(levels[0], levels[2], levels[1]))
+
+        val phase = engine.state.value.phase as TimerPhase.Running
+        assertEquals(1, phase.levelIndex)
+        assertEquals(TimerPhase.Running(1, clock.now + 120_000L), phase)
+        assertEquals(120_000L, engine.state.value.remainingMs)
+    }
+
+    @Test
+    fun `reordering the structure while running leaves the deadline alone when it still fits`() {
+        val engine = engine()
+        engine.goToLevel(1)
+        engine.primaryAction()
+        clock.advance(60_000L)
+        engine.tick()
+        val deadline = (engine.state.value.phase as TimerPhase.Running).deadlineMs
+
+        // Swap the first two levels; index 1 now holds the old level 0 (600s), which comfortably
+        // covers the ~240s remaining, so the deadline should be left exactly where it was.
+        engine.setLevels(listOf(levels[1], levels[0], levels[2]))
+
+        val phase = engine.state.value.phase as TimerPhase.Running
+        assertEquals(1, phase.levelIndex)
+        assertEquals("the deadline must not be disturbed", deadline, phase.deadlineMs)
     }
 
     @Test
@@ -520,6 +587,25 @@ class TimerEngineTest {
 
         assertEquals(TimerPhase.Ready(1, 42_000L), engine.state.value.phase)
         assertFalse("restoring must never start the clock on its own", engine.state.value.isRunning)
+    }
+
+    @Test
+    fun `a session saved while a level had ended restores parked on the next level, not the finished one`() {
+        val engine = engine()
+
+        // Simulates what TimerService persists for a LevelEnded save: the target is the level after
+        // the one that just ended, and the recorded remainder is deliberately stale — a couple of
+        // seconds left on the old, already-finished level — to prove it is never trusted.
+        engine.restore(levelIndex = 1, remainingMs = 2_000L, wasLevelEnded = true)
+
+        val state = engine.state.value
+        assertEquals(
+            "must park on the next level at its own full duration, not the stale remainder",
+            TimerPhase.Ready(1, 300_000L),
+            state.phase,
+        )
+        assertFalse("the alarm must never be resurrected", state.isRunning)
+        assertFalse(state.isAlarming)
     }
 
     @Test

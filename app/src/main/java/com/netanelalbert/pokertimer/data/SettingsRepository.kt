@@ -3,6 +3,7 @@ package com.netanelalbert.pokertimer.data
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
@@ -37,7 +38,8 @@ class SettingsRepository private constructor(private val context: Context) {
     val savedSession: Flow<SavedSession?> = context.dataStore.data.map { prefs ->
         val level = prefs[KEY_SESSION_LEVEL] ?: return@map null
         val remaining = prefs[KEY_SESSION_REMAINING] ?: return@map null
-        SavedSession(level, remaining)
+        val levelEnded = prefs[KEY_SESSION_LEVEL_ENDED] ?: false
+        SavedSession(level, remaining, levelEnded)
     }
 
     suspend fun update(transform: (TimerSettings) -> TimerSettings) {
@@ -53,10 +55,15 @@ class SettingsRepository private constructor(private val context: Context) {
         }
     }
 
-    suspend fun saveSession(levelIndex: Int, remainingMs: Long) {
+    /**
+     * [levelEnded] marks a save taken while the level's alarm was ringing or snoozed, so a restore
+     * knows not to trust [remainingMs] as a countdown to resume — see [TimerEngine.restore].
+     */
+    suspend fun saveSession(levelIndex: Int, remainingMs: Long, levelEnded: Boolean = false) {
         context.dataStore.edit { prefs ->
             prefs[KEY_SESSION_LEVEL] = levelIndex
             prefs[KEY_SESSION_REMAINING] = remainingMs
+            prefs[KEY_SESSION_LEVEL_ENDED] = levelEnded
         }
     }
 
@@ -64,15 +71,17 @@ class SettingsRepository private constructor(private val context: Context) {
         context.dataStore.edit { prefs ->
             prefs.remove(KEY_SESSION_LEVEL)
             prefs.remove(KEY_SESSION_REMAINING)
+            prefs.remove(KEY_SESSION_LEVEL_ENDED)
         }
     }
 
-    data class SavedSession(val levelIndex: Int, val remainingMs: Long)
+    data class SavedSession(val levelIndex: Int, val remainingMs: Long, val wasLevelEnded: Boolean = false)
 
     companion object {
         private val KEY_SETTINGS = stringPreferencesKey("settings_json")
         private val KEY_SESSION_LEVEL = intPreferencesKey("session_level")
         private val KEY_SESSION_REMAINING = longPreferencesKey("session_remaining_ms")
+        private val KEY_SESSION_LEVEL_ENDED = booleanPreferencesKey("session_level_ended")
 
         @Volatile
         private var instance: SettingsRepository? = null

@@ -68,7 +68,13 @@ class TimerEngine(private val clock: () -> Long) {
     /**
      * Swap the structure underneath the clock. Editing levels mid-tournament is legitimate (someone
      * always wants to shorten the blinds at 1am), so we keep the current position rather than
-     * resetting: indices are clamped and a running deadline is left alone.
+     * resetting: indices are clamped and a running deadline is left alone unless it no longer makes
+     * sense for the level it now points at.
+     *
+     * Levels are identified by array index, not by any stable id — there isn't one. So this can only
+     * detect a clamp or a now-too-long remainder; reordering or inserting a level ahead of the
+     * running one silently reattaches the countdown to different blinds even though nothing was
+     * clamped. A real fix needs a per-level id and is deliberately out of scope here.
      */
     fun setLevels(levels: List<BlindLevel>) {
         if (levels.isEmpty()) return
@@ -89,7 +95,18 @@ class TimerEngine(private val clock: () -> Long) {
                 }
                 TimerPhase.Ready(index, remaining)
             }
-            is TimerPhase.Running -> TimerPhase.Running(p.levelIndex.coerceIn(0, lastIndex), p.deadlineMs)
+            is TimerPhase.Running -> {
+                val index = p.levelIndex.coerceIn(0, lastIndex)
+                val remaining = p.deadlineMs - clock()
+                if (index != p.levelIndex || remaining > levels[index].durationMs) {
+                    // Either the clamp moved us onto a different level, or the level now at this
+                    // index is shorter than what's left on the clock — either way the deadline
+                    // belongs to a level that no longer exists here, so rebase it.
+                    TimerPhase.Running(index, clock() + levels[index].durationMs)
+                } else {
+                    TimerPhase.Running(index, p.deadlineMs)
+                }
+            }
             is TimerPhase.LevelEnded -> p.copy(
                 finishedLevelIndex = p.finishedLevelIndex.coerceIn(0, lastIndex),
                 nextLevelIndex = p.nextLevelIndex?.takeIf { it <= lastIndex },
@@ -287,12 +304,24 @@ class TimerEngine(private val clock: () -> Long) {
 
     // endregion
 
-    /** Restore a position saved before the process was killed. Always comes back parked. */
-    fun restore(levelIndex: Int, remainingMs: Long) {
+    /**
+     * Restore a position saved before the process was killed. Always comes back parked.
+     *
+     * [wasLevelEnded] marks a save taken while a level's alarm was ringing (or snoozed): the alarm
+     * itself is never resurrected — coming back to a blaring alarm hours later is worse than the bug
+     * this fixes — so instead we land parked on [levelIndex] at its full duration, ignoring whatever
+     * [remainingMs] was recorded as, rather than trying to reconstruct how much of the wait-for-tap
+     * had elapsed.
+     */
+    fun restore(levelIndex: Int, remainingMs: Long, wasLevelEnded: Boolean = false) {
         val current = _state.value
         if (current.phase !is TimerPhase.Ready || current.levels.isEmpty()) return
         val index = levelIndex.coerceIn(0, current.levels.lastIndex)
-        val remaining = remainingMs.coerceIn(0L, current.levels[index].durationMs)
+        val remaining = if (wasLevelEnded) {
+            current.levels[index].durationMs
+        } else {
+            remainingMs.coerceIn(0L, current.levels[index].durationMs)
+        }
         if (remaining <= 0L) return
         _state.value = current.copy(
             phase = TimerPhase.Ready(index, remaining),
