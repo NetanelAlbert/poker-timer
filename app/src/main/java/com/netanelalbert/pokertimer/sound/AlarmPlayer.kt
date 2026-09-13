@@ -76,14 +76,16 @@ class AlarmPlayer(private val context: Context) {
         volume: Float,
         looping: Boolean,
     ): MediaPlayer? {
-        // Tried in order: what the user picked, then this slot's own default, then the device
-        // tones as a last resort. A stored uri can stop working (the track was deleted, or the
-        // permission to read it went away) and silence would be the worst outcome here.
+        // Tried in order: what the user picked, then this slot's own default. A stored uri can
+        // stop working (the track was deleted, or the permission to read it went away), and for
+        // the blinds-up alarm silence would be the worst outcome, so it also falls back to the
+        // device tones. The warning and chime deliberately do not: a full-length device ringtone
+        // standing in for a half-second blip is worse than no blip at all.
         val candidates = listOfNotNull(
             uri?.takeIf { it.isNotBlank() }?.let(Uri::parse),
             defaultFor(slot),
-            RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
-            RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
+            RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM).takeIf { slot == SoundSlot.ALARM },
+            RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION).takeIf { slot == SoundSlot.ALARM },
         )
         for (candidate in candidates) {
             // Constructed outside runCatching so a failure between here and `start()` still has a
@@ -123,7 +125,7 @@ class AlarmPlayer(private val context: Context) {
     }
 
     private fun rawUri(resId: Int): Uri =
-        Uri.parse("android.resource://${'$'}{context.packageName}/${'$'}resId")
+        Uri.parse("android.resource://${context.packageName}/$resId")
 
     private fun startVibration() {
         val vibrator = vibrator ?: return
