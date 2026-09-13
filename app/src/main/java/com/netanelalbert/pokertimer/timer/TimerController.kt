@@ -33,6 +33,9 @@ object TimerController {
 
     fun reset(context: Context) = act(context) { engine.reset() }
 
+    /** Reverses the most recent reset/next/previous, within its short undo window. */
+    fun undo(context: Context) = act(context) { engine.undo() }
+
     private inline fun act(context: Context, action: () -> Unit) {
         action()
         syncService(context)

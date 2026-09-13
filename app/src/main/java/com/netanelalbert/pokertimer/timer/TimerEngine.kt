@@ -169,11 +169,11 @@ class TimerEngine(private val clock: () -> Long) {
     /** Jump back a level. Restarts that level's full duration. */
     fun previousLevel() = goToLevel(_state.value.displayLevelIndex - 1)
 
-    fun goToLevel(index: Int) {
+    fun goToLevel(index: Int) = undoable {
         val current = _state.value
         // Stepping off either end is a no-op rather than a clamp: silently restarting the level
         // you are already on is not what "next"/"previous" is asking for.
-        val target = index.takeIf { it in current.levels.indices } ?: return
+        val target = index.takeIf { it in current.levels.indices } ?: return@undoable
         // A live clock (running, or an alarm waiting to be acknowledged — snoozed or not) stays
         // live across a jump; a parked clock stays parked, so nudging through the structure never
         // starts a level.
@@ -191,9 +191,9 @@ class TimerEngine(private val clock: () -> Long) {
     }
 
     /** Back to the top of the structure, parked. */
-    fun reset() {
+    fun reset() = undoable {
         val current = _state.value
-        val duration = current.levels.firstOrNull()?.durationMs ?: return
+        val duration = current.levels.firstOrNull()?.durationMs ?: return@undoable
         warningFired = false
         _state.value = current.copy(
             phase = TimerPhase.Ready(0, duration),
@@ -249,6 +249,54 @@ class TimerEngine(private val clock: () -> Long) {
             warningFired = true
         }
         _state.value = current.copy(remainingMs = remaining)
+    }
+
+    // endregion
+
+    // region undo
+
+    private data class Snapshot(val state: TimerState, val warningFired: Boolean, val takenAtMs: Long)
+
+    private var snapshot: Snapshot? = null
+
+    /**
+     * Snapshots [state] and the private [warningFired] flag, runs [action], and keeps the snapshot
+     * only if [action] actually changed something. A no-op call (stepping off either end of the
+     * structure, resetting with no levels) must never clobber a real snapshot left by an earlier
+     * destructive action — that would make the earlier action impossible to undo.
+     *
+     * The snapshot is kept inside the engine rather than handed out: [warningFired] is private and
+     * must stay that way, and an undo that restored [state] but not that flag would re-fire the
+     * pre-end warning for a level that had already had it.
+     */
+    private fun undoable(action: () -> Unit) {
+        val stateBefore = _state.value
+        val warningBefore = warningFired
+        action()
+        if (_state.value == stateBefore && warningFired == warningBefore) return
+        snapshot = Snapshot(stateBefore, warningBefore, clock())
+    }
+
+    /**
+     * Reverses the most recent [undoable] action. A no-op if nothing is snapshotted, or if the
+     * snapshot has expired.
+     *
+     * The snapshot expires [UNDO_WINDOW_MS] after it was taken — comfortably longer than the undo
+     * snackbar's on-screen time, so a genuine tap near the end of its lifetime is never dropped, but
+     * short enough that undo can never resurrect a position from long after the fact. Either way,
+     * calling this always clears the snapshot, so a stale one can't be reused by a later call.
+     *
+     * Restoring a [TimerPhase.Running] deadline needs no adjustment for the time undo() took to be
+     * called: deadlines are absolute values on [clock], so the restored phase already accounts for
+     * it — the clock kept correctly running underneath while the snapshot sat idle. Only
+     * [TimerState.remainingMs], which is a cached snapshot of that arithmetic, needs recomputing.
+     */
+    fun undo() {
+        val snap = snapshot ?: return
+        snapshot = null
+        if (clock() - snap.takenAtMs > UNDO_WINDOW_MS) return
+        warningFired = snap.warningFired
+        _state.value = snap.state.withRecomputedRemaining()
     }
 
     // endregion
@@ -327,5 +375,10 @@ class TimerEngine(private val clock: () -> Long) {
             phase = TimerPhase.Ready(index, remaining),
             remainingMs = remaining,
         )
+    }
+
+    private companion object {
+        /** See [undo]. */
+        const val UNDO_WINDOW_MS = 15_000L
     }
 }

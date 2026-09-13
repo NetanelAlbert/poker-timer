@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -33,11 +34,18 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -56,6 +64,7 @@ import com.netanelalbert.pokertimer.model.TimerPhase
 import com.netanelalbert.pokertimer.model.TimerState
 import com.netanelalbert.pokertimer.timer.TimerController
 import com.netanelalbert.pokertimer.timer.formatRemaining
+import kotlinx.coroutines.launch
 
 /**
  * The tournament clock itself — designed to be read from the far side of a table: one enormous
@@ -69,6 +78,49 @@ fun TimerScreen(
 ) {
     val context = LocalContext.current
     val state by viewModel.timerState.collectAsState()
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val undoLabel = stringResource(R.string.undo)
+
+    fun showUndoSnackbar(message: String) {
+        scope.launch {
+            // A second destructive tap while the first snackbar is still up should offer undo for
+            // the new action, not queue behind the old one.
+            snackbarHostState.currentSnackbarData?.dismiss()
+            val result = snackbarHostState.showSnackbar(
+                message = message,
+                actionLabel = undoLabel,
+                duration = SnackbarDuration.Long,
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                TimerController.undo(context)
+            }
+        }
+    }
+
+    val onReset: () -> Unit = {
+        TimerController.reset(context)
+        showUndoSnackbar(context.getString(R.string.reset_undone_message))
+    }
+    val onNext: () -> Unit = {
+        TimerController.nextLevel(context)
+        showUndoSnackbar(
+            context.getString(
+                R.string.skip_undone_message,
+                TimerController.state.value.displayLevelIndex + 1,
+            )
+        )
+    }
+    val onPrevious: () -> Unit = {
+        TimerController.previousLevel(context)
+        showUndoSnackbar(
+            context.getString(
+                R.string.skip_undone_message,
+                TimerController.state.value.displayLevelIndex + 1,
+            )
+        )
+    }
 
     // When a level runs out the whole screen goes red and pulses, so it is impossible to miss
     // across a noisy room even before anyone registers the alarm.
@@ -91,9 +143,19 @@ fun TimerScreen(
     val isLandscape =
         LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
+    // The Scaffold only exists to host the undo snackbar. Its default container would paint over
+    // the alarm's pulsing background below, so it must stay transparent, and its default inset
+    // handling is left off (0-padding) since the Column already applies systemBarsPadding itself.
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = Color.Transparent,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+    ) { paddingValues ->
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .padding(paddingValues)
             .background(if (alarming) background.copy(alpha = pulseAlpha) else background)
     ) {
         Column(
@@ -136,9 +198,9 @@ fun TimerScreen(
                             state = state,
                             onPrimary = { TimerController.primaryAction(context) },
                             onSnooze = { TimerController.snooze(context) },
-                            onPrevious = { TimerController.previousLevel(context) },
-                            onNext = { TimerController.nextLevel(context) },
-                            onReset = { TimerController.reset(context) },
+                            onPrevious = onPrevious,
+                            onNext = onNext,
+                            onReset = onReset,
                         )
                     }
                 }
@@ -156,12 +218,13 @@ fun TimerScreen(
                     state = state,
                     onPrimary = { TimerController.primaryAction(context) },
                     onSnooze = { TimerController.snooze(context) },
-                    onPrevious = { TimerController.previousLevel(context) },
-                    onNext = { TimerController.nextLevel(context) },
-                    onReset = { TimerController.reset(context) },
+                    onPrevious = onPrevious,
+                    onNext = onNext,
+                    onReset = onReset,
                 )
             }
         }
+    }
     }
 }
 
