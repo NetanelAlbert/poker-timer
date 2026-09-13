@@ -48,7 +48,11 @@ class PokerTimerViewModel(application: Application) : AndroidViewModel(applicati
             // Come back to wherever the tournament was if the process was killed. restore() is a
             // no-op unless the clock is parked, so this can never stomp a live countdown.
             repository.savedSession.first()?.let { saved ->
-                TimerController.engine.restore(saved.levelIndex, saved.remainingMs)
+                TimerController.engine.restore(
+                    saved.levelIndex,
+                    saved.remainingMs,
+                    saved.wasLevelEnded,
+                )
             }
             _ready.value = true
         }
